@@ -1,0 +1,292 @@
+"use strict";
+(function () {
+  var STOCKS = [
+    {ticker:'NVDA', shares:6, cost:0, price:0},
+    {ticker:'AVGO', shares:4, cost:0, price:0},
+    {ticker:'TSM', shares:2, cost:0, price:0},
+    {ticker:'GOOGL', shares:3, cost:0, price:0},
+    {ticker:'SPCX', shares:4, cost:135, price:160},
+    {ticker:'PLTR', shares:3, cost:0, price:0},
+    {ticker:'IONQ', shares:3, cost:0, price:0},
+    {ticker:'PPTA', shares:4, cost:0, price:0},
+    {ticker:'RKLB', shares:1, cost:0, price:0}
+  ];
+  var FUNDS = [
+    {name:'eMAXIS Slim 全世界株式', units:0, nav:20000, monthly:20000},
+    {name:'iFreeNEXT FANG+', units:0, nav:30000, monthly:20000}
+  ];
+  var GOAL_25 = 10000000, GOAL_30 = 100000000, CONTRIB_DAY = 12;
+  var STORAGE_KEY = 'asset-dashboard-data';
+  var CAT_COLORS = { '米国株':'#58a6ff', '投資信託':'#00d4aa', 'iDeCo':'#a78bfa', '現金':'#f0b429' };
+  var lastContribMonth = null;
+  var currentHistory = [];
+
+  function $(id) { return document.getElementById(id); }
+  function fmtYen(v) { return '¥' + Math.round(v).toLocaleString('ja-JP'); }
+
+  function buildStockInputs() {
+    var c = $('us-stock-inputs'); if (!c) return; c.innerHTML = '';
+    STOCKS.forEach(function (s, i) {
+      var row = document.createElement('div'); row.className = 'input-row';
+      row.innerHTML =
+        '<label style="width:56px; font-weight:500;">' + s.ticker + '</label>' +
+        '<input type="number" data-idx="' + i + '" data-field="shares" value="' + s.shares + '" step="0.0001" style="width:70px;">' +
+        '<input type="number" data-idx="' + i + '" data-field="cost" value="' + s.cost + '" step="0.01" placeholder="平均取得$" style="width:100px;">';
+      c.appendChild(row);
+    });
+  }
+  function buildFundInputs() {
+    var c = $('fund-inputs'); if (!c) return; c.innerHTML = '';
+    FUNDS.forEach(function (f, i) {
+      var row = document.createElement('div'); row.className = 'input-row';
+      row.innerHTML =
+        '<label style="width:170px;">' + f.name + '</label>' +
+        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(4) + '" step="0.0001" placeholder="保有口数" style="width:110px;">' +
+        '<input type="number" data-idx="' + i + '" data-field="nav" value="' + f.nav + '" step="1" placeholder="基準価額" style="width:90px;">' +
+        '<input type="number" data-idx="' + i + '" data-field="monthly" value="' + f.monthly + '" step="1000" placeholder="月額" style="width:90px;">';
+      c.appendChild(row);
+    });
+  }
+  function attachInputListeners() {
+    var inputs = document.querySelectorAll('input');
+    for (var i = 0; i < inputs.length; i++) {
+      inputs[i].addEventListener('input', function () { syncFromInputs(); render(); });
+    }
+  }
+  function monthKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1); }
+  function checkContributionDue() {
+    var now = new Date(), key = monthKey(now);
+    var banner = $('contribution-banner'), msg = $('contribution-msg');
+    if (now.getDate() >= CONTRIB_DAY && lastContribMonth !== key) {
+      banner.style.display = 'flex';
+      msg.textContent = '今月(' + (now.getMonth() + 1) + '月' + CONTRIB_DAY + '日)の積立分を反映できます。先に基準価額・iDeCo評価額を更新してから押してください。';
+    } else { banner.style.display = 'none'; }
+  }
+  function loadData() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY); if (!raw) return [];
+      var d = JSON.parse(raw);
+      if (d.apiKey) $('api-key').value = d.apiKey;
+      if (d.fx) $('fx-rate').value = (parseFloat(d.fx) || 150).toFixed(2);
+      if (d.ideco !== undefined) $('ideco-value').value = d.ideco;
+      if (d.idecoMonthly !== undefined) $('ideco-monthly').value = d.idecoMonthly;
+      if (d.cash !== undefined) $('cash-value').value = d.cash;
+      if (d.stocks) d.stocks.forEach(function (s, i) { if (STOCKS[i]) { STOCKS[i].shares = s.shares; STOCKS[i].cost = s.cost; STOCKS[i].price = s.price; } });
+      if (d.funds) d.funds.forEach(function (f, i) { if (FUNDS[i]) { FUNDS[i].units = f.units; FUNDS[i].nav = f.nav; FUNDS[i].monthly = f.monthly; } });
+      if (d.lastContribMonth) lastContribMonth = d.lastContribMonth;
+      return d.history || [];
+    } catch (e) { return []; }
+  }
+  function saveData() {
+    try {
+      var d = {
+        apiKey: $('api-key').value.trim(),
+        fx: parseFloat($('fx-rate').value) || 150,
+        ideco: parseFloat($('ideco-value').value) || 0,
+        idecoMonthly: parseFloat($('ideco-monthly').value) || 0,
+        cash: parseFloat($('cash-value').value) || 0,
+        stocks: STOCKS.map(function (s) { return {shares: s.shares, cost: s.cost, price: s.price}; }),
+        funds: FUNDS.map(function (f) { return {units: f.units, nav: f.nav, monthly: f.monthly}; }),
+        lastContribMonth: lastContribMonth, history: currentHistory
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    } catch (e) {}
+  }
+  function syncFromInputs() {
+    var si = document.querySelectorAll('#us-stock-inputs input');
+    for (var i = 0; i < si.length; i++) { STOCKS[parseInt(si[i].getAttribute('data-idx'), 10)][si[i].getAttribute('data-field')] = parseFloat(si[i].value) || 0; }
+    var fi = document.querySelectorAll('#fund-inputs input');
+    for (var j = 0; j < fi.length; j++) { FUNDS[parseInt(fi[j].getAttribute('data-idx'), 10)][fi[j].getAttribute('data-field')] = parseFloat(fi[j].value) || 0; }
+  }
+  function scalars() {
+    return {
+      fx: parseFloat($('fx-rate').value) || 150,
+      ideco: parseFloat($('ideco-value').value) || 0,
+      idecoMonthly: parseFloat($('ideco-monthly').value) || 0,
+      cash: parseFloat($('cash-value').value) || 0
+    };
+  }
+  function drawDoughnut(canvas, items) {
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    var cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 6, ir = r * 0.6;
+    var total = items.reduce(function (a, b) { return a + b.value; }, 0);
+    if (total <= 0) { ctx.fillStyle = '#30363d'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#0d1117'; ctx.beginPath(); ctx.arc(cx, cy, ir, 0, Math.PI * 2); ctx.fill(); return; }
+    var start = -Math.PI / 2;
+    items.forEach(function (it) {
+      if (it.value <= 0) return;
+      var ang = it.value / total * Math.PI * 2;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, start, start + ang); ctx.closePath();
+      ctx.fillStyle = it.color; ctx.fill(); start += ang;
+    });
+    ctx.beginPath(); ctx.arc(cx, cy, ir, 0, Math.PI * 2); ctx.fillStyle = '#0d1117'; ctx.fill();
+  }
+  function drawLine(canvas, labels, values) {
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    var padL = 50, padR = 12, padT = 12, padB = 24;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+    var maxV = Math.max.apply(null, values.concat([1])), minV = 0;
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1; ctx.fillStyle = '#8b949e'; ctx.font = '11px sans-serif';
+    for (var g = 0; g <= 4; g++) {
+      var y = padT + plotH * g / 4;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillText('¥' + (maxV * (1 - g / 4) / 1000000).toFixed(1) + 'M', 4, y + 4);
+    }
+    if (values.length === 0) return;
+    function px(i) { return values.length === 1 ? padL + plotW / 2 : padL + plotW * i / (values.length - 1); }
+    function py(v) { return padT + plotH * (1 - (v - minV) / (maxV - minV || 1)); }
+    ctx.beginPath(); ctx.moveTo(px(0), py(values[0]));
+    for (var i = 1; i < values.length; i++) ctx.lineTo(px(i), py(values[i]));
+    ctx.strokeStyle = '#00d4aa'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.lineTo(px(values.length - 1), padT + plotH); ctx.lineTo(px(0), padT + plotH); ctx.closePath();
+    ctx.fillStyle = 'rgba(0,212,170,0.1)'; ctx.fill();
+    ctx.fillStyle = '#00d4aa';
+    for (var k = 0; k < values.length; k++) { ctx.beginPath(); ctx.arc(px(k), py(values[k]), 3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#8b949e'; ctx.textAlign = 'center';
+    for (var m = 0; m < labels.length; m++) ctx.fillText(labels[m], px(m), h - 6);
+    ctx.textAlign = 'start';
+  }
+  function render() {
+    var s = scalars();
+    var usValue = 0, usCost = 0;
+    STOCKS.forEach(function (st) { usValue += st.shares * st.price * s.fx; usCost += st.shares * st.cost * s.fx; });
+    var fundTotal = 0;
+    FUNDS.forEach(function (f) { fundTotal += f.units / 10000 * f.nav; });
+    var total = usValue + fundTotal + s.ideco + s.cash;
+    $('total-assets').textContent = fmtYen(total);
+    var pct25 = Math.min(100, total / GOAL_25 * 100);
+    $('progress-bar-1').style.width = pct25 + '%';
+    $('progress-text').textContent = pct25.toFixed(1) + '%';
+    $('progress-100m').textContent = (total / GOAL_30 * 100).toFixed(2);
+    var usPL = usValue - usCost;
+    $('us-cost').textContent = fmtYen(usCost);
+    $('us-value').textContent = fmtYen(usValue);
+    var plEl = $('us-pl');
+    plEl.textContent = (usPL >= 0 ? '+' : '') + fmtYen(usPL);
+    plEl.style.color = usPL >= 0 ? 'var(--success)' : 'var(--danger)';
+    var cats = [
+      {label: '米国株', value: usValue}, {label: '投資信託', value: fundTotal},
+      {label: 'iDeCo', value: s.ideco}, {label: '現金', value: s.cash}
+    ].sort(function (a, b) { return b.value - a.value; });
+    var cc = $('category-cards'); cc.innerHTML = '';
+    cats.forEach(function (c) {
+      var div = document.createElement('div'); div.className = 'card';
+      div.innerHTML = '<p class="card-label">' + c.label + '</p><p class="card-value">' + fmtYen(c.value) + '</p>';
+      cc.appendChild(div);
+    });
+    var sorted = STOCKS.map(function (st) {
+      return {ticker: st.ticker, shares: st.shares, cost: st.cost, price: st.price, valueJPY: st.shares * st.price * s.fx, pl: st.shares * st.price * s.fx - st.shares * st.cost * s.fx};
+    }).sort(function (a, b) { return b.valueJPY - a.valueJPY; });
+    var tb = $('us-stock-body'); tb.innerHTML = '';
+    sorted.forEach(function (st) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td style="font-weight:500;">' + st.ticker + '</td><td>' + st.shares + '</td><td>' + st.cost.toFixed(2) + '</td>' +
+        '<td>' + st.price.toFixed(2) + '</td><td>' + fmtYen(st.valueJPY) + '</td>' +
+        '<td style="color:' + (st.pl >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' + (st.pl >= 0 ? '+' : '') + fmtYen(st.pl) + '</td>';
+      tb.appendChild(tr);
+    });
+    var fb = $('fund-body'); fb.innerHTML = '';
+    FUNDS.forEach(function (f) {
+      var v = f.units / 10000 * f.nav;
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td style="font-weight:500;">' + f.name + '</td><td>' + f.units.toFixed(4) + '</td><td>' + f.nav.toLocaleString('ja-JP') + '</td><td>' + fmtYen(v) + '</td>';
+      fb.appendChild(tr);
+    });
+    var sum = cats.reduce(function (a, c) { return a + c.value; }, 0) || 1;
+    var lg = $('alloc-legend'); lg.innerHTML = '';
+    cats.forEach(function (c) {
+      var pct = (c.value / sum * 100).toFixed(1);
+      var span = document.createElement('span'); span.className = 'legend-item';
+      span.innerHTML = '<span class="swatch" style="background:' + CAT_COLORS[c.label] + ';"></span>' + c.label + ' ' + pct + '%';
+      lg.appendChild(span);
+    });
+    try {
+      drawDoughnut($('allocChart'), cats.map(function (c) { return {value: c.value, color: CAT_COLORS[c.label]}; }));
+      var hl = currentHistory.map(function (h) { return h.month; });
+      var hv = currentHistory.map(function (h) { return h.total; });
+      hl.push('今回'); hv.push(total);
+      drawLine($('trendChart'), hl, hv);
+    } catch (e) {}
+    checkContributionDue();
+    return total;
+  }
+  function fetchFx() {
+    var fxStatus = $('fx-status');
+    return fetch('https://api.frankfurter.app/latest?from=USD&to=JPY')
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (d) {
+        var rate = d.rates && d.rates.JPY;
+        if (rate) { $('fx-rate').value = rate.toFixed(2); if (fxStatus) fxStatus.textContent = '自動取得済 (' + (d.date || '') + ')'; return true; }
+        throw new Error();
+      })
+      .catch(function () { if (fxStatus) fxStatus.textContent = '為替の自動取得に失敗。手動で入力してください。'; return false; });
+  }
+  function fetchStock(ticker, key) {
+    return fetch('https://finnhub.io/api/v1/quote?symbol=' + encodeURIComponent(ticker) + '&token=' + encodeURIComponent(key))
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (d) { return (typeof d.c === 'number' && d.c > 0) ? d.c : null; });
+  }
+  function refreshAll() {
+    var btn = $('refresh-btn'), updated = $('last-updated');
+    btn.disabled = true; updated.textContent = '取得中...';
+    fetchFx().then(function () {
+      var key = $('api-key').value.trim();
+      if (!key) {
+        updated.textContent = '為替のみ更新。株価取得にはFinnhub APIキーが必要です。';
+        btn.disabled = false; render(); saveData(); return;
+      }
+      var ok = 0, fail = 0, idx = 0;
+      function next() {
+        if (idx >= STOCKS.length) {
+          var now = new Date();
+          updated.textContent = '更新: ' + now.toLocaleString('ja-JP') + '(株価 ' + ok + '件取得' + (fail > 0 ? ' / ' + fail + '件失敗' : '') + ')';
+          btn.disabled = false; buildStockInputs(); attachInputListeners(); render(); saveData(); return;
+        }
+        var st = STOCKS[idx];
+        fetchStock(st.ticker, key).then(function (price) {
+          if (price !== null) { st.price = price; ok++; } else { fail++; }
+        }).catch(function () { fail++; }).then(function () { idx++; setTimeout(next, 250); });
+      }
+      next();
+    });
+  }
+  function applyContribution() {
+    syncFromInputs();
+    var s = scalars();
+    FUNDS.forEach(function (f) { if (f.nav > 0 && f.monthly > 0) f.units += f.monthly / f.nav * 10000; });
+    if (s.idecoMonthly > 0) { var el = $('ideco-value'); el.value = (parseFloat(el.value) || 0) + s.idecoMonthly; }
+    lastContribMonth = monthKey(new Date());
+    buildFundInputs(); attachInputListeners(); render();
+    $('save-msg').textContent = '積立を反映しました。下の「保存」ボタンで確定してください。';
+  }
+  function boot() {
+    buildStockInputs(); buildFundInputs();
+    currentHistory = loadData();
+    buildStockInputs(); buildFundInputs(); attachInputListeners();
+    try { render(); } catch (e) {}
+    $('refresh-btn').addEventListener('click', refreshAll);
+    $('apply-contribution-btn').addEventListener('click', applyContribution);
+    $('save-btn').addEventListener('click', function () {
+      syncFromInputs();
+      var total = render(), now = new Date(), ml = (now.getMonth() + 1) + '月';
+      var last = currentHistory[currentHistory.length - 1];
+      if (last && last.month === ml) last.total = total; else currentHistory.push({month: ml, total: total});
+      saveData();
+      $('save-msg').textContent = '保存しました(' + now.toLocaleString('ja-JP') + ')';
+      render();
+    });
+    $('reset-btn').addEventListener('click', function () {
+      if (!confirm('全データをリセットしますか?')) return;
+      localStorage.removeItem(STORAGE_KEY); location.reload();
+    });
+    refreshAll();
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+})();
