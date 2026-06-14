@@ -1,29 +1,35 @@
-const CACHE_NAME = 'asset-dashboard-v2';
-const ASSETS = ['./','./index.html','./app.js','./manifest.json','./icon-192.png','./icon-512.png'];
+var CACHE_NAME = 'asset-dashboard-v3';
+var ASSETS = ['./','./index.html','./app.js','./manifest.json','./icon-192.png','./icon-512.png'];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)));
+self.addEventListener('install', function (event) {
+  event.waitUntil(caches.open(CACHE_NAME).then(function (c) { return c.addAll(ASSETS); }));
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))));
+self.addEventListener('activate', function (event) {
+  event.waitUntil(
+    caches.keys().then(function (keys) {
+      return Promise.all(keys.filter(function (k) { return k !== CACHE_NAME; }).map(function (k) { return caches.delete(k); }));
+    })
+  );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
-  if (url.hostname.includes('finnhub.io') || url.hostname.includes('frankfurter.app')) {
-    return;
-  }
+  var url = new URL(event.request.url);
+  // 株価・為替APIはキャッシュせず常にネットへ
+  if (url.hostname.indexOf('finnhub.io') !== -1 || url.hostname.indexOf('frankfurter.app') !== -1) return;
+  // アプリ本体はネットワーク優先(更新を確実に反映)、失敗時のみキャッシュ
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((resp) => {
-        if (resp.ok) { const clone = resp.clone(); caches.open(CACHE_NAME).then((c) => c.put(event.request, clone)); }
-        return resp;
-      }).catch(() => cached);
+    fetch(event.request).then(function (resp) {
+      if (resp && resp.ok) {
+        var clone = resp.clone();
+        caches.open(CACHE_NAME).then(function (c) { c.put(event.request, clone); });
+      }
+      return resp;
+    }).catch(function () {
+      return caches.match(event.request);
     })
   );
 });

@@ -56,11 +56,12 @@
   function monthKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1); }
   function checkContributionDue() {
     var now = new Date(), key = monthKey(now);
-    var banner = $('contribution-banner'), msg = $('contribution-msg');
+    var area = $('contribution-area'), msg = $('contribution-msg');
+    if (!area) return;
     if (now.getDate() >= CONTRIB_DAY && lastContribMonth !== key) {
-      banner.style.display = 'flex';
+      area.style.display = 'block';
       msg.textContent = '今月(' + (now.getMonth() + 1) + '月' + CONTRIB_DAY + '日)の積立分を反映できます。先に基準価額・iDeCo評価額を更新してから押してください。';
-    } else { banner.style.display = 'none'; }
+    } else { area.style.display = 'none'; }
   }
   function loadData() {
     try {
