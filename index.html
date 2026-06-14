@@ -49,6 +49,7 @@
   .pl-row.total { font-size:14px; font-weight:500; border-top:0.5px solid var(--border); padding-top:8px; }
   table { width:100%; font-size:13px; border-collapse:collapse; table-layout:fixed; margin-bottom:1rem; }
   th,td { padding:6px 4px; text-align:right; }
+  td:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   th:first-child,td:first-child { text-align:left; }
   th { color:var(--text-secondary); font-weight:500; border-bottom:0.5px solid var(--border); }
   tbody tr { border-bottom:0.5px solid var(--border); }
@@ -69,6 +70,8 @@
   .actions { margin-top:1.5rem; display:flex; gap:8px; flex-wrap:wrap; }
   .save-msg { font-size:12px; color:var(--text-secondary); margin-top:8px; }
   .col-head { font-size:11px; color:var(--text-tertiary); }
+  .period-btn { padding:4px 12px; font-size:12px; min-width:40px; }
+  .period-btn.active { background:var(--accent); color:#04201a; border-color:var(--accent); font-weight:500; }
 </style>
 </head>
 <body>
@@ -126,12 +129,19 @@
 <div style="overflow-x:auto;">
 <table>
   <colgroup><col style="width:40%"><col style="width:20%"><col style="width:20%"><col style="width:20%"></colgroup>
-  <thead><tr><th>ファンド名</th><th>保有口数</th><th>基準価額(1万口)</th><th>評価額¥</th></tr></thead>
+  <thead><tr><th>ファンド名</th><th>保有口数</th><th>基準価額</th><th>評価額¥</th></tr></thead>
   <tbody id="fund-body"></tbody>
 </table>
 </div>
 
-<p class="section-title">資産推移(月次)</p>
+<div style="display:flex; justify-content:space-between; align-items:center; margin:1.5rem 0 8px; flex-wrap:wrap; gap:8px;">
+  <p class="section-title" style="margin:0;">資産推移</p>
+  <div id="period-tabs" style="display:flex; gap:4px;">
+    <button class="period-btn" data-period="week" type="button">週</button>
+    <button class="period-btn" data-period="month" type="button">月</button>
+    <button class="period-btn" data-period="year" type="button">年</button>
+  </div>
+</div>
 <canvas id="trendChart" width="448" height="220"></canvas>
 
 <details open>

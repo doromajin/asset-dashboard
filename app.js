@@ -12,17 +12,55 @@
     {ticker:'RKLB', shares:1, cost:0, price:0}
   ];
   var FUNDS = [
-    {name:'eMAXIS Slim 全世界株式', units:0, nav:20000, monthly:20000},
-    {name:'iFreeNEXT FANG+', units:0, nav:30000, monthly:20000}
+    {name:'eMAXIS Slim 全世界株式', short:'オルカン', units:0, nav:20000, monthly:20000},
+    {name:'iFreeNEXT FANG+', short:'FANG+', units:0, nav:30000, monthly:20000}
   ];
   var GOAL_25 = 10000000, GOAL_30 = 100000000, CONTRIB_DAY = 12;
   var STORAGE_KEY = 'asset-dashboard-data';
   var CAT_COLORS = { '米国株':'#58a6ff', '投資信託':'#00d4aa', 'iDeCo':'#a78bfa', '現金':'#f0b429' };
   var lastContribMonth = null;
   var currentHistory = [];
+  var trendPeriod = 'week';
 
   function $(id) { return document.getElementById(id); }
   function fmtYen(v) { return '¥' + Math.round(v).toLocaleString('ja-JP'); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  // 履歴を week/month/year で集計。各期間の最後のスナップショットを代表値とする
+  function aggregateHistory(hist, period) {
+    // 後方互換: 古い {month:'6月'} 形式は date がないのでそのまま月ラベルで扱う
+    var buckets = {};
+    var order = [];
+    hist.forEach(function (h) {
+      var key, label;
+      if (h.date) {
+        var d = new Date(h.date + 'T00:00:00');
+        if (period === 'year') {
+          key = '' + d.getFullYear();
+          label = d.getFullYear() + '年';
+        } else if (period === 'week') {
+          // ISO週番号
+          var tmp = new Date(d.getTime());
+          var day = (tmp.getDay() + 6) % 7;
+          tmp.setDate(tmp.getDate() - day + 3);
+          var firstThu = new Date(tmp.getFullYear(), 0, 4);
+          var week = 1 + Math.round(((tmp - firstThu) / 86400000 - 3 + ((firstThu.getDay() + 6) % 7)) / 7);
+          key = tmp.getFullYear() + '-W' + pad2(week);
+          label = (d.getMonth() + 1) + '/' + d.getDate();
+        } else { // month
+          key = d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+          label = (d.getMonth() + 1) + '月';
+        }
+      } else {
+        key = h.month || '?';
+        label = h.month || '?';
+      }
+      if (!(key in buckets)) order.push(key);
+      buckets[key] = {label: label, total: h.total};
+    });
+    return order.map(function (k) { return buckets[k]; });
+  }
+
 
   function buildStockInputs() {
     var c = $('us-stock-inputs'); if (!c) return; c.innerHTML = '';
@@ -40,8 +78,8 @@
     FUNDS.forEach(function (f, i) {
       var row = document.createElement('div'); row.className = 'input-row';
       row.innerHTML =
-        '<label style="width:170px;">' + f.name + '</label>' +
-        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(4) + '" step="0.0001" placeholder="保有口数" style="width:110px;">' +
+        '<label style="width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + f.name + '">' + f.name + '</label>' +
+        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(1) + '" step="0.1" placeholder="保有口数" style="width:110px;">' +
         '<input type="number" data-idx="' + i + '" data-field="nav" value="' + f.nav + '" step="1" placeholder="基準価額" style="width:90px;">' +
         '<input type="number" data-idx="' + i + '" data-field="monthly" value="' + f.monthly + '" step="1000" placeholder="月額" style="width:90px;">';
       c.appendChild(row);
@@ -194,7 +232,7 @@
     FUNDS.forEach(function (f) {
       var v = f.units / 10000 * f.nav;
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td style="font-weight:500;">' + f.name + '</td><td>' + f.units.toFixed(4) + '</td><td>' + f.nav.toLocaleString('ja-JP') + '</td><td>' + fmtYen(v) + '</td>';
+      tr.innerHTML = '<td style="font-weight:500;" title="' + f.name + '">' + (f.short || f.name) + '</td><td>' + f.units.toFixed(1) + '</td><td>' + f.nav.toLocaleString('ja-JP') + '</td><td>' + fmtYen(v) + '</td>';
       fb.appendChild(tr);
     });
     var sum = cats.reduce(function (a, c) { return a + c.value; }, 0) || 1;
@@ -207,9 +245,10 @@
     });
     try {
       drawDoughnut($('allocChart'), cats.map(function (c) { return {value: c.value, color: CAT_COLORS[c.label]}; }));
-      var hl = currentHistory.map(function (h) { return h.month; });
-      var hv = currentHistory.map(function (h) { return h.total; });
-      hl.push('今回'); hv.push(total);
+      var agg = aggregateHistory(currentHistory, trendPeriod);
+      var hl = agg.map(function (a) { return a.label; });
+      var hv = agg.map(function (a) { return a.total; });
+      hl.push('今'); hv.push(total);
       drawLine($('trendChart'), hl, hv);
     } catch (e) {}
     checkContributionDue();
@@ -271,11 +310,29 @@
     try { render(); } catch (e) {}
     $('refresh-btn').addEventListener('click', refreshAll);
     $('apply-contribution-btn').addEventListener('click', applyContribution);
+
+    var periodBtns = document.querySelectorAll('.period-btn');
+    function updatePeriodButtons() {
+      for (var p = 0; p < periodBtns.length; p++) {
+        if (periodBtns[p].getAttribute('data-period') === trendPeriod) periodBtns[p].className = 'period-btn active';
+        else periodBtns[p].className = 'period-btn';
+      }
+    }
+    for (var b = 0; b < periodBtns.length; b++) {
+      periodBtns[b].addEventListener('click', function () {
+        trendPeriod = this.getAttribute('data-period');
+        updatePeriodButtons();
+        render();
+      });
+    }
+    updatePeriodButtons();
     $('save-btn').addEventListener('click', function () {
       syncFromInputs();
-      var total = render(), now = new Date(), ml = (now.getMonth() + 1) + '月';
+      var total = render(), now = new Date();
+      var dateStr = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
       var last = currentHistory[currentHistory.length - 1];
-      if (last && last.month === ml) last.total = total; else currentHistory.push({month: ml, total: total});
+      if (last && last.date === dateStr) { last.total = total; }
+      else { currentHistory.push({date: dateStr, total: total}); }
       saveData();
       $('save-msg').textContent = '保存しました(' + now.toLocaleString('ja-JP') + ')';
       render();
