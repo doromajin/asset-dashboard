@@ -278,23 +278,49 @@
   }
   function fetchFx() {
     var fxStatus = $('fx-status');
-    var urls = [
-      'https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY',
-      'https://api.frankfurter.app/v1/latest?base=USD&symbols=JPY',
-      'https://api.frankfurter.app/latest?from=USD&to=JPY'
-    ];
+    var apiKey = $('api-key').value.trim();
+    var sources = [];
+
+    // 1) Finnhub forex/rates: リアルタイム(APIキーがある場合)
+    if (apiKey) {
+      sources.push({
+        url: 'https://finnhub.io/api/v1/forex/rates?base=USD&token=' + encodeURIComponent(apiKey),
+        parse: function (d) {
+          var q = d && d.quote;
+          var rate = q && (q.JPY || q.jpy);
+          if (!rate) return null;
+          return { rate: rate, label: 'リアルタイム取得済' };
+        }
+      });
+    }
+
+    // 2) Frankfurter: 日次の参照レート(フォールバック)
+    ['https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY',
+     'https://api.frankfurter.app/v1/latest?base=USD&symbols=JPY',
+     'https://api.frankfurter.app/latest?from=USD&to=JPY'
+    ].forEach(function (u) {
+      sources.push({
+        url: u,
+        parse: function (d) {
+          var rate = d.rates && d.rates.JPY;
+          if (!rate) return null;
+          return { rate: rate, label: '日次レート取得済 (' + (d.date || '') + ')' };
+        }
+      });
+    });
+
     function tryUrl(i) {
-      if (i >= urls.length) {
+      if (i >= sources.length) {
         if (fxStatus) fxStatus.textContent = '為替の自動取得に失敗しました。手動で入力してください。';
         return Promise.resolve(false);
       }
-      return fetch(urls[i])
+      return fetch(sources[i].url)
         .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
         .then(function (d) {
-          var rate = d.rates && d.rates.JPY;
-          if (!rate) throw new Error('no rate in response');
-          $('fx-rate').value = rate.toFixed(2);
-          if (fxStatus) fxStatus.textContent = '自動取得済 (' + (d.date || '') + ')';
+          var result = sources[i].parse(d);
+          if (!result) throw new Error('no rate in response');
+          $('fx-rate').value = result.rate.toFixed(2);
+          if (fxStatus) fxStatus.textContent = result.label;
           return true;
         })
         .catch(function () { return tryUrl(i + 1); });
