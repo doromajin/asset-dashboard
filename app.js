@@ -289,7 +289,7 @@
           var q = d && d.quote;
           var rate = q && (q.JPY || q.jpy);
           if (!rate) return null;
-          return { rate: rate, label: 'リアルタイム取得済' };
+          return { rate: rate, label: 'リアルタイム取得済 (' + new Date().toLocaleString('ja-JP') + ')' };
         }
       });
     }
@@ -304,7 +304,7 @@
         parse: function (d) {
           var rate = d.rates && d.rates.JPY;
           if (!rate) return null;
-          return { rate: rate, label: '日次レート取得済 (' + (d.date || '') + ')' };
+          return { rate: rate, label: '日次レート取得済 (取得 ' + new Date().toLocaleString('ja-JP') + ' / データ日付 ' + (d.date || '') + ')' };
         }
       });
     });
