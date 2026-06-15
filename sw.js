@@ -19,7 +19,7 @@ self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
   var url = new URL(event.request.url);
   // 株価・為替APIはキャッシュせず常にネットへ
-  if (url.hostname.indexOf('finnhub.io') !== -1 || url.hostname.indexOf('frankfurter.app') !== -1) return;
+  if (url.hostname.indexOf('finnhub.io') !== -1 || url.hostname.indexOf('frankfurter.app') !== -1 || url.hostname.indexOf('frankfurter.dev') !== -1) return;
   // アプリ本体はネットワーク優先(更新を確実に反映)、失敗時のみキャッシュ
   event.respondWith(
     fetch(event.request).then(function (resp) {

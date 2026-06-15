@@ -79,8 +79,8 @@
       var row = document.createElement('div'); row.className = 'input-row';
       row.innerHTML =
         '<label style="width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + f.name + '">' + f.name + '</label>' +
-        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(1) + '" step="0.1" placeholder="保有口数" style="width:110px;">' +
         '<input type="number" data-idx="' + i + '" data-field="nav" value="' + f.nav + '" step="1" placeholder="基準価額" style="width:90px;">' +
+        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(1) + '" step="0.1" placeholder="保有口数" style="width:110px;">' +
         '<input type="number" data-idx="' + i + '" data-field="monthly" value="' + f.monthly + '" step="1000" placeholder="月額" style="width:90px;">';
       c.appendChild(row);
     });
@@ -217,15 +217,26 @@
       cc.appendChild(div);
     });
     var sorted = STOCKS.map(function (st) {
-      return {ticker: st.ticker, shares: st.shares, cost: st.cost, price: st.price, valueJPY: st.shares * st.price * s.fx, pl: st.shares * st.price * s.fx - st.shares * st.cost * s.fx};
+      var valueJPY = st.shares * st.price * s.fx;
+      var costJPY = st.shares * st.cost * s.fx;
+      var pl = valueJPY - costJPY;
+      var plPct = costJPY > 0 ? (pl / costJPY * 100) : null;
+      return {ticker: st.ticker, shares: st.shares, cost: st.cost, price: st.price, valueJPY: valueJPY, pl: pl, plPct: plPct};
     }).sort(function (a, b) { return b.valueJPY - a.valueJPY; });
     var tb = $('us-stock-body'); tb.innerHTML = '';
     sorted.forEach(function (st) {
       var tr = document.createElement('tr');
+      var plColor = st.pl >= 0 ? 'var(--success)' : 'var(--danger)';
+      var sign = st.pl >= 0 ? '+' : '-';
+      var pctText = st.plPct === null ? '' : '(' + sign + Math.abs(st.plPct).toFixed(1) + '%)';
+      var plAmountText = sign + fmtYen(Math.abs(st.pl));
       tr.innerHTML =
         '<td style="font-weight:500;">' + st.ticker + '</td><td>' + st.shares + '</td><td>' + st.cost.toFixed(2) + '</td>' +
         '<td>' + st.price.toFixed(2) + '</td><td>' + fmtYen(st.valueJPY) + '</td>' +
-        '<td style="color:' + (st.pl >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' + (st.pl >= 0 ? '+' : '') + fmtYen(st.pl) + '</td>';
+        '<td style="color:' + plColor + '; white-space:nowrap;">' +
+          '<div>' + plAmountText + '</div>' +
+          (pctText ? '<div style="font-size:11px; opacity:0.85;">' + pctText + '</div>' : '') +
+        '</td>';
       tb.appendChild(tr);
     });
     var fb = $('fund-body'); fb.innerHTML = '';
@@ -256,14 +267,29 @@
   }
   function fetchFx() {
     var fxStatus = $('fx-status');
-    return fetch('https://api.frankfurter.app/latest?from=USD&to=JPY')
-      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-      .then(function (d) {
-        var rate = d.rates && d.rates.JPY;
-        if (rate) { $('fx-rate').value = rate.toFixed(2); if (fxStatus) fxStatus.textContent = '自動取得済 (' + (d.date || '') + ')'; return true; }
-        throw new Error();
-      })
-      .catch(function () { if (fxStatus) fxStatus.textContent = '為替の自動取得に失敗。手動で入力してください。'; return false; });
+    var urls = [
+      'https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY',
+      'https://api.frankfurter.app/v1/latest?base=USD&symbols=JPY',
+      'https://api.frankfurter.app/latest?from=USD&to=JPY'
+    ];
+    function tryUrl(i) {
+      if (i >= urls.length) {
+        if (fxStatus) fxStatus.textContent = '為替の自動取得に失敗しました。手動で入力してください。';
+        return Promise.resolve(false);
+      }
+      return fetch(urls[i])
+        .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+        .then(function (d) {
+          var rate = d.rates && d.rates.JPY;
+          if (!rate) throw new Error('no rate in response');
+          $('fx-rate').value = rate.toFixed(2);
+          if (fxStatus) fxStatus.textContent = '自動取得済 (' + (d.date || '') + ')';
+          return true;
+        })
+        .catch(function () { return tryUrl(i + 1); });
+    }
+    if (fxStatus) fxStatus.textContent = '取得中...';
+    return tryUrl(0);
   }
   function fetchStock(ticker, key) {
     return fetch('https://finnhub.io/api/v1/quote?symbol=' + encodeURIComponent(ticker) + '&token=' + encodeURIComponent(key))
