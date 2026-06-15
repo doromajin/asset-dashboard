@@ -70,6 +70,16 @@
   .actions { margin-top:1.5rem; display:flex; gap:8px; flex-wrap:wrap; }
   .save-msg { font-size:12px; color:var(--text-secondary); margin-top:8px; }
   .col-head { font-size:11px; color:var(--text-tertiary); align-items:flex-end !important; padding-bottom:4px; }
+  .fund-grid {
+    display:grid;
+    grid-template-columns: minmax(80px,1.4fr) minmax(60px,0.8fr) minmax(60px,0.8fr) minmax(60px,0.8fr);
+    gap:6px;
+    align-items:end;
+    margin-bottom:6px;
+  }
+  .fund-grid .fund-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+  .fund-grid input { width:100%; min-width:0; }
+  .fund-grid span { font-size:11px; color:var(--text-tertiary); text-align:right; }
   .period-btn { padding:4px 12px; font-size:12px; min-width:40px; }
   .period-btn.active { background:var(--accent); color:#04201a; border-color:var(--accent); font-weight:500; }
 </style>
@@ -112,11 +122,11 @@
     <p class="section-title" style="margin-top:0;">評価損益(米国株)</p>
     <div class="pl-row"><span style="color:var(--text-secondary);">投資額合計</span><span id="us-cost">¥0</span></div>
     <div class="pl-row"><span style="color:var(--text-secondary);">評価額合計</span><span id="us-value">¥0</span></div>
-    <div class="pl-row total"><span>評価損益</span><span id="us-pl">¥0</span></div>
+    <div class="pl-row total"><span>評価損益</span><span><span id="us-pl">¥0</span> <span id="us-pl-pct" style="font-size:11px; opacity:0.85;"></span></span></div>
   </div>
 </div>
 
-<p class="section-title">米国株 保有銘柄(評価額の大きい順)</p>
+<p class="section-title">米国株 保有銘柄</p>
 <div style="overflow-x:auto;">
 <table>
   <colgroup><col style="width:16%"><col style="width:12%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup>
@@ -174,11 +184,11 @@
   <div class="field-group">
     <p class="field-label">投資信託</p>
     <p class="field-hint" style="margin:0 0 8px;">保有口数・基準価額(1万口あたり)・毎月の積立額を入力。基準価額は手動更新(月1回、証券会社アプリで確認)。積立日は毎月12日。</p>
-    <div class="input-row col-head">
-      <span style="width:170px;">ファンド名</span>
-      <span style="width:90px; text-align:right;">基準価額</span>
-      <span style="width:110px; text-align:right;">保有口数</span>
-      <span style="width:90px; text-align:right;">月額積立</span>
+    <div class="fund-grid">
+      <span style="text-align:left;">ファンド名</span>
+      <span>基準価額</span>
+      <span>保有口数</span>
+      <span>月額積立</span>
     </div>
     <div id="fund-inputs"></div>
   </div>

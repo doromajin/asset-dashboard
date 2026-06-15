@@ -76,12 +76,12 @@
   function buildFundInputs() {
     var c = $('fund-inputs'); if (!c) return; c.innerHTML = '';
     FUNDS.forEach(function (f, i) {
-      var row = document.createElement('div'); row.className = 'input-row';
+      var row = document.createElement('div'); row.className = 'fund-grid';
       row.innerHTML =
-        '<label style="width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + f.name + '">' + f.name + '</label>' +
-        '<input type="number" data-idx="' + i + '" data-field="nav" value="' + f.nav + '" step="1" placeholder="基準価額" style="width:90px;">' +
-        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(1) + '" step="0.1" placeholder="保有口数" style="width:110px;">' +
-        '<input type="number" data-idx="' + i + '" data-field="monthly" value="' + f.monthly + '" step="1000" placeholder="月額" style="width:90px;">';
+        '<div class="fund-name" title="' + f.name + '">' + f.name + '</div>' +
+        '<input type="number" data-idx="' + i + '" data-field="nav" value="' + f.nav + '" step="1" placeholder="基準価額">' +
+        '<input type="number" data-idx="' + i + '" data-field="units" value="' + f.units.toFixed(1) + '" step="0.1" placeholder="保有口数">' +
+        '<input type="number" data-idx="' + i + '" data-field="monthly" value="' + f.monthly + '" step="1000" placeholder="月額">';
       c.appendChild(row);
     });
   }
@@ -204,8 +204,19 @@
     $('us-cost').textContent = fmtYen(usCost);
     $('us-value').textContent = fmtYen(usValue);
     var plEl = $('us-pl');
-    plEl.textContent = (usPL >= 0 ? '+' : '') + fmtYen(usPL);
+    var plSign = usPL >= 0 ? '+' : '-';
+    plEl.textContent = plSign + fmtYen(Math.abs(usPL));
     plEl.style.color = usPL >= 0 ? 'var(--success)' : 'var(--danger)';
+    var pctEl = $('us-pl-pct');
+    if (pctEl) {
+      if (usCost > 0) {
+        var usPLPct = usPL / usCost * 100;
+        pctEl.textContent = '(' + plSign + Math.abs(usPLPct).toFixed(1) + '%)';
+        pctEl.style.color = usPL >= 0 ? 'var(--success)' : 'var(--danger)';
+      } else {
+        pctEl.textContent = '';
+      }
+    }
     var cats = [
       {label: '米国株', value: usValue}, {label: '投資信託', value: fundTotal},
       {label: 'iDeCo', value: s.ideco}, {label: '現金', value: s.cash}
@@ -231,7 +242,7 @@
       var pctText = st.plPct === null ? '' : '(' + sign + Math.abs(st.plPct).toFixed(1) + '%)';
       var plAmountText = sign + fmtYen(Math.abs(st.pl));
       tr.innerHTML =
-        '<td style="font-weight:500;">' + st.ticker + '</td><td>' + st.shares + '</td><td>' + st.cost.toFixed(2) + '</td>' +
+        '<td style="font-weight:700;">' + st.ticker + '</td><td>' + st.shares + '</td><td>' + st.cost.toFixed(2) + '</td>' +
         '<td>' + st.price.toFixed(2) + '</td><td>' + fmtYen(st.valueJPY) + '</td>' +
         '<td style="color:' + plColor + '; white-space:nowrap;">' +
           '<div>' + plAmountText + '</div>' +
