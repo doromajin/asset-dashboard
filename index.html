@@ -89,7 +89,7 @@
 
 <!-- ハンバーガーメニュー -->
 <div id="menu-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:99;" onclick="closeMenu()"></div>
-<div id="menu-drawer" style="display:none; position:fixed; top:0; right:0; width:300px; max-width:90vw; height:100vh; background:var(--bg-secondary); z-index:100; padding:1.5rem 1rem; overflow-y:auto; box-shadow:-4px 0 16px rgba(0,0,0,0.4);">
+<div id="menu-drawer" style="display:none; position:fixed; top:0; right:0; width:300px; max-width:90vw; height:100vh; background:var(--bg-secondary); z-index:100; padding:1.5rem 1rem; padding-top:max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem)); overflow-y:auto; box-shadow:-4px 0 16px rgba(0,0,0,0.4);">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
     <p style="font-size:15px; font-weight:500; margin:0;">設定</p>
     <button onclick="closeMenu()" style="background:none; border:none; color:var(--text-secondary); font-size:20px; cursor:pointer; padding:4px 8px;">✕</button>
