@@ -86,7 +86,34 @@
 </head>
 <body>
 <div class="container">
-<h1>資産ダッシュボード</h1>
+
+<!-- ハンバーガーメニュー -->
+<div id="menu-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:99;" onclick="closeMenu()"></div>
+<div id="menu-drawer" style="display:none; position:fixed; top:0; right:0; width:300px; max-width:90vw; height:100vh; background:var(--bg-secondary); z-index:100; padding:1.5rem 1rem; overflow-y:auto; box-shadow:-4px 0 16px rgba(0,0,0,0.4);">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+    <p style="font-size:15px; font-weight:500; margin:0;">設定</p>
+    <button onclick="closeMenu()" style="background:none; border:none; color:var(--text-secondary); font-size:20px; cursor:pointer; padding:4px 8px;">✕</button>
+  </div>
+  <div class="field-group" style="margin-top:0;">
+    <p class="field-label">Alpha Vantage APIキー</p>
+    <p class="field-hint" style="margin:0 0 6px;">為替レートのリアルタイム取得用。alphavantage.co で無料登録(メールのみ、クレカ不要)。1日25回まで無料。</p>
+    <input type="text" id="av-api-key" placeholder="APIキーを貼り付け" style="width:100%;">
+  </div>
+  <div class="field-group">
+    <p class="field-label">Finnhub APIキー</p>
+    <p class="field-hint" style="margin:0 0 6px;">株価の自動取得用。finnhub.io で無料登録(クレカ不要)。</p>
+    <input type="text" id="api-key" placeholder="APIキーを貼り付け" style="width:100%;">
+  </div>
+  <div class="field-group">
+    <button id="menu-save-btn" style="width:100%;">APIキーを保存</button>
+    <p class="save-msg" id="menu-save-msg"></p>
+  </div>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+  <h1>資産ダッシュボード</h1>
+  <button onclick="openMenu()" style="background:none; border:none; color:var(--text-primary); cursor:pointer; padding:4px 8px; font-size:22px; line-height:1;" aria-label="メニューを開く">☰</button>
+</div>
 <p class="updated" id="last-updated">株価・為替は未取得</p>
 
 <div class="header-row">
@@ -218,17 +245,8 @@
     <button id="apply-contribution-btn">今月分の積立を反映</button>
   </div>
 
-  <div class="field-group">
-    <p class="field-label">Finnhub APIキー(株価自動取得用)</p>
-    <div class="input-row">
-      <input type="text" id="api-key" placeholder="APIキーを貼り付け" style="flex:1; min-width:180px;">
-    </div>
-    <p class="field-hint">finnhub.io で無料登録するとAPIキーが取得できます(クレジットカード不要)。一度入力すれば保存され、次回から自動取得します。</p>
-  </div>
-
   <div class="actions">
-    <button id="save-btn" class="primary">保存して今月のスナップショットを記録</button>
-    <button id="reset-btn">データをリセット</button>
+    <button id="save-btn" class="primary">今日の資産を記録</button>
   </div>
   <p class="save-msg" id="save-msg"></p>
 </details>

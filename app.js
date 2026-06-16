@@ -106,6 +106,7 @@
       var raw = localStorage.getItem(STORAGE_KEY); if (!raw) return [];
       var d = JSON.parse(raw);
       if (d.apiKey) $('api-key').value = d.apiKey;
+      if (d.avApiKey) $('av-api-key').value = d.avApiKey;
       if (d.fx) $('fx-rate').value = (parseFloat(d.fx) || 150).toFixed(2);
       if (d.ideco !== undefined) $('ideco-value').value = d.ideco;
       if (d.idecoMonthly !== undefined) $('ideco-monthly').value = d.idecoMonthly;
@@ -120,6 +121,7 @@
     try {
       var d = {
         apiKey: $('api-key').value.trim(),
+        avApiKey: $('av-api-key').value.trim(),
         fx: parseFloat($('fx-rate').value) || 150,
         ideco: parseFloat($('ideco-value').value) || 0,
         idecoMonthly: parseFloat($('ideco-monthly').value) || 0,
@@ -278,13 +280,27 @@
   }
   function fetchFx() {
     var fxStatus = $('fx-status');
-    var apiKey = $('api-key').value.trim();
+    var avKey = $('av-api-key').value.trim();
+    var finnhubKey = $('api-key').value.trim();
     var sources = [];
 
-    // 1) Finnhub forex/rates: リアルタイム(APIキーがある場合)
-    if (apiKey) {
+    // 1) Alpha Vantage: リアルタイム為替(専用APIキーがある場合)
+    if (avKey) {
       sources.push({
-        url: 'https://finnhub.io/api/v1/forex/rates?base=USD&token=' + encodeURIComponent(apiKey),
+        url: 'https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=JPY&apikey=' + encodeURIComponent(avKey),
+        parse: function (d) {
+          var r = d && d['Realtime Currency Exchange Rate'];
+          var rate = r && parseFloat(r['5. Exchange Rate']);
+          if (!rate) return null;
+          return { rate: rate, label: '取得: ' + new Date().toLocaleString('ja-JP') };
+        }
+      });
+    }
+
+    // 2) Finnhub forex/rates(Finnhub APIキーがある場合)
+    if (finnhubKey) {
+      sources.push({
+        url: 'https://finnhub.io/api/v1/forex/rates?base=USD&token=' + encodeURIComponent(finnhubKey),
         parse: function (d) {
           var q = d && d.quote;
           var rate = q && (q.JPY || q.jpy);
@@ -294,7 +310,7 @@
       });
     }
 
-    // 2) Frankfurter: 日次の参照レート(フォールバック)
+    // 3) Frankfurter: 日次フォールバック
     ['https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY',
      'https://api.frankfurter.app/v1/latest?base=USD&symbols=JPY',
      'https://api.frankfurter.app/latest?from=USD&to=JPY'
@@ -333,21 +349,25 @@
       .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
       .then(function (d) { return (typeof d.c === 'number' && d.c > 0) ? d.c : null; });
   }
-  function refreshAll() {
+  function refreshAll(onComplete) {
     var btn = $('refresh-btn'), updated = $('last-updated');
     btn.disabled = true; updated.textContent = '取得中...';
     fetchFx().then(function () {
       var key = $('api-key').value.trim();
       if (!key) {
         updated.textContent = '為替のみ更新。株価取得にはFinnhub APIキーが必要です。';
-        btn.disabled = false; render(); saveData(); return;
+        btn.disabled = false; render(); saveData();
+        if (onComplete) onComplete();
+        return;
       }
       var ok = 0, fail = 0, idx = 0;
       function next() {
         if (idx >= STOCKS.length) {
           var now = new Date();
           updated.textContent = '更新: ' + now.toLocaleString('ja-JP') + '(株価 ' + ok + '件取得' + (fail > 0 ? ' / ' + fail + '件失敗' : '') + ')';
-          btn.disabled = false; buildStockInputs(); attachInputListeners(); render(); saveData(); return;
+          btn.disabled = false; buildStockInputs(); attachInputListeners(); render(); saveData();
+          if (onComplete) onComplete();
+          return;
         }
         var st = STOCKS[idx];
         fetchStock(st.ticker, key).then(function (price) {
@@ -366,12 +386,28 @@
     buildFundInputs(); attachInputListeners(); render();
     $('save-msg').textContent = '積立を反映しました。下の「保存」ボタンで確定してください。';
   }
+  function autoSnapshot(total) {
+    var now = new Date();
+    var dateStr = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+    var last = currentHistory[currentHistory.length - 1];
+    if (!last || last.date !== dateStr) {
+      currentHistory.push({date: dateStr, total: total});
+      saveData();
+    }
+  }
+
   function boot() {
     buildStockInputs(); buildFundInputs();
     currentHistory = loadData();
     buildStockInputs(); buildFundInputs(); attachInputListeners();
     try { render(); } catch (e) {}
-    $('refresh-btn').addEventListener('click', refreshAll);
+
+    $('refresh-btn').addEventListener('click', function () {
+      refreshAll(function () {
+        var total = render();
+        autoSnapshot(total);
+      });
+    });
     $('apply-contribution-btn').addEventListener('click', applyContribution);
 
     var periodBtns = document.querySelectorAll('.period-btn');
@@ -389,6 +425,8 @@
       });
     }
     updatePeriodButtons();
+
+    // 手動スナップショット保存ボタン
     $('save-btn').addEventListener('click', function () {
       syncFromInputs();
       var total = render(), now = new Date();
@@ -397,15 +435,34 @@
       if (last && last.date === dateStr) { last.total = total; }
       else { currentHistory.push({date: dateStr, total: total}); }
       saveData();
-      $('save-msg').textContent = '保存しました(' + now.toLocaleString('ja-JP') + ')';
+      $('save-msg').textContent = '記録しました(' + now.toLocaleString('ja-JP') + ')';
       render();
     });
-    $('reset-btn').addEventListener('click', function () {
-      if (!confirm('全データをリセットしますか?')) return;
-      localStorage.removeItem(STORAGE_KEY); location.reload();
+
+    // メニューのAPIキー保存ボタン
+    $('menu-save-btn').addEventListener('click', function () {
+      saveData();
+      $('menu-save-msg').textContent = '保存しました';
+      setTimeout(function () { $('menu-save-msg').textContent = ''; }, 2000);
     });
-    refreshAll();
+
+    // 株価・為替を取得し終わったら自動スナップショット
+    refreshAll(function () {
+      var total = render();
+      autoSnapshot(total);
+    });
   }
+
+  // ハンバーガーメニューの開閉(グローバル関数)
+  window.openMenu = function () {
+    $('menu-drawer').style.display = 'block';
+    $('menu-overlay').style.display = 'block';
+  };
+  window.closeMenu = function () {
+    $('menu-drawer').style.display = 'none';
+    $('menu-overlay').style.display = 'none';
+  };
+
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
