@@ -411,22 +411,32 @@
 
     // sim-area: クリック・タッチ両対応
     var simArea = $('sim-area');
-    if (simArea) {
-      simArea.addEventListener('click', function () { window.openSim(); });
-      simArea.addEventListener('touchend', function (e) {
+    var simTouchStartX = 0, simTouchStartY = 0;
+    function simTouchStart(e) {
+      simTouchStartX = e.touches[0].clientX;
+      simTouchStartY = e.touches[0].clientY;
+    }
+    function simTouchEnd(e) {
+      var dx = Math.abs(e.changedTouches[0].clientX - simTouchStartX);
+      var dy = Math.abs(e.changedTouches[0].clientY - simTouchStartY);
+      // 移動距離が10px以内のみタップと判定
+      if (dx < 10 && dy < 10) {
         e.preventDefault();
         window.openSim();
-      });
+      }
+    }
+    if (simArea) {
+      simArea.addEventListener('touchstart', simTouchStart, {passive: true});
+      simArea.addEventListener('touchend', simTouchEnd);
+      simArea.addEventListener('click', function () { window.openSim(); });
       simArea.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') window.openSim();
       });
     }
     var simHint = $('sim-hint');
     if (simHint) {
-      simHint.addEventListener('touchend', function (e) {
-        e.preventDefault();
-        window.openSim();
-      });
+      simHint.addEventListener('touchstart', simTouchStart, {passive: true});
+      simHint.addEventListener('touchend', simTouchEnd);
     }
 
     $('refresh-btn').addEventListener('click', function () {
