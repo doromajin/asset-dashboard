@@ -94,12 +94,19 @@
   function monthKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1); }
   function checkContributionDue() {
     var now = new Date(), key = monthKey(now);
-    var area = $('contribution-area'), msg = $('contribution-msg');
-    if (!area) return;
-    if (now.getDate() >= CONTRIB_DAY && lastContribMonth !== key) {
-      area.style.display = 'block';
-      msg.textContent = '今月(' + (now.getMonth() + 1) + '月' + CONTRIB_DAY + '日)の積立分を反映できます。先に基準価額・iDeCo評価額を更新してから押してください。';
-    } else { area.style.display = 'none'; }
+    var msg = $('contribution-msg');
+    var btn = $('apply-contribution-btn');
+    if (!msg || !btn) return;
+    if (lastContribMonth === key) {
+      msg.textContent = '今月(' + (now.getMonth() + 1) + '月)の積立は反映済みです。';
+      btn.disabled = true;
+    } else if (now.getDate() < CONTRIB_DAY) {
+      msg.textContent = '積立日(' + CONTRIB_DAY + '日)になると押せるようになります。';
+      btn.disabled = true;
+    } else {
+      msg.textContent = '今月(' + (now.getMonth() + 1) + '月)の積立を反映できます。先に基準価額・iDeCo評価額を更新してから押してください。';
+      btn.disabled = false;
+    }
   }
   function loadData() {
     try {
@@ -256,7 +263,7 @@
     FUNDS.forEach(function (f) {
       var v = f.units / 10000 * f.nav;
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td style="font-weight:500;" title="' + f.name + '">' + (f.short || f.name) + '</td><td>' + f.units.toFixed(1) + '</td><td>' + f.nav.toLocaleString('ja-JP') + '</td><td>' + fmtYen(v) + '</td>';
+      tr.innerHTML = '<td style="font-weight:500;" title="' + f.name + '">' + f.name + '</td><td>' + f.units.toFixed(1) + '</td><td>' + f.nav.toLocaleString('ja-JP') + '</td><td>' + fmtYen(v) + '</td>';
       fb.appendChild(tr);
     });
     var sum = cats.reduce(function (a, c) { return a + c.value; }, 0) || 1;
