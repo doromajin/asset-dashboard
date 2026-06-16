@@ -409,6 +409,19 @@
     buildStockInputs(); buildFundInputs(); attachInputListeners();
     try { render(); } catch (e) {}
 
+    // sim-area: クリック・タッチ両対応
+    var simArea = $('sim-area');
+    if (simArea) {
+      simArea.addEventListener('click', function () { window.openSim(); });
+      simArea.addEventListener('touchend', function (e) {
+        e.preventDefault();
+        window.openSim();
+      });
+      simArea.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') window.openSim();
+      });
+    }
+
     $('refresh-btn').addEventListener('click', function () {
       refreshAll(function () {
         var total = render();
@@ -462,16 +475,168 @@
 
   // ハンバーガーメニューの開閉(グローバル関数)
   window.openMenu = function () {
+    var overlay = $('menu-overlay');
     $('menu-drawer').style.display = 'block';
-    $('menu-overlay').style.display = 'block';
+    overlay.style.display = 'block';
+    overlay.onclick = window.closeMenu;
+    overlay.ontouchend = function(e) { e.preventDefault(); window.closeMenu(); };
   };
   window.closeMenu = function () {
     $('menu-drawer').style.display = 'none';
     $('menu-overlay').style.display = 'none';
   };
 
+  // シミュレーターの開閉・計算
+  var simCurrentTotal = 0;
+
+  window.openSim = function () {
+    // 保存済みのスライダー値を復元
+    try {
+      var saved = localStorage.getItem('sim-params');
+      if (saved) {
+        var p = JSON.parse(saved);
+        if (p.stock) $('sim-stock').value = p.stock;
+        if (p.fund) $('sim-fund').value = p.fund;
+        if (p.dt) $('sim-dt').value = p.dt;
+        if (p.tsumi) $('sim-tsumi').value = p.tsumi;
+      }
+    } catch(e) {}
+    var overlay = $('sim-overlay');
+    overlay.style.display = 'block';
+    $('sim-modal').style.display = 'block';
+    overlay.onclick = window.closeSim;
+    overlay.ontouchend = function(e) { e.preventDefault(); window.closeSim(); };
+    calcSim();
+  };
+  window.closeSim = function () {
+    $('sim-overlay').style.display = 'none';
+    $('sim-modal').style.display = 'none';
+  };
+
+  function drawSimLine(canvas, labels, datasets) {
+    if (!canvas || !canvas.getContext) return;
+    // 実際の表示幅に合わせてcanvasサイズを設定(右余白問題を解消)
+    var displayW = canvas.parentElement ? canvas.parentElement.clientWidth : 448;
+    if (displayW > 0) { canvas.width = displayW; canvas.height = 200; }
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    var padL = 52, padR = 8, padT = 8, padB = 24;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+    var allVals = [];
+    datasets.forEach(function (ds) { ds.data.forEach(function (v) { allVals.push(v); }); });
+    var maxV = Math.max.apply(null, allVals.concat([1]));
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 0.5;
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px sans-serif';
+    for (var g = 0; g <= 4; g++) {
+      var y = padT + plotH * g / 4;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      var val = maxV * (1 - g / 4);
+      ctx.fillText('¥' + (val / 10000).toFixed(0) + '万', 2, y + 4);
+    }
+    var n = labels.length;
+    function px(i) { return n <= 1 ? padL + plotW / 2 : padL + plotW * i / (n - 1); }
+    function py(v) { return padT + plotH * (1 - v / (maxV || 1)); }
+    datasets.forEach(function (ds) {
+      ctx.beginPath(); ctx.moveTo(px(0), py(ds.data[0]));
+      for (var i = 1; i < ds.data.length; i++) ctx.lineTo(px(i), py(ds.data[i]));
+      ctx.strokeStyle = ds.color; ctx.lineWidth = ds.width || 1.5; ctx.stroke();
+      ctx.fillStyle = ds.color;
+      for (var k = 0; k < ds.data.length; k++) {
+        ctx.beginPath(); ctx.arc(px(k), py(ds.data[k]), ds.width === 2 ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+      }
+    });
+    ctx.fillStyle = '#8b949e'; ctx.textAlign = 'center';
+    for (var m = 0; m < labels.length; m++) ctx.fillText(labels[m], px(m), h - 6);
+    ctx.textAlign = 'start';
+  }
+
+  function calcSim() {
+    var GOAL = 10000000;
+    var stockRate = parseInt($('sim-stock').value) / 100;
+    var fundRate = parseInt($('sim-fund').value) / 100;
+    var dtMonthly = parseInt($('sim-dt').value);
+    var tsumiMonthly = parseInt($('sim-tsumi').value);
+    $('sim-stock-label').textContent = (stockRate * 100).toFixed(0) + '%';
+    $('sim-fund-label').textContent = (fundRate * 100).toFixed(0) + '%';
+    $('sim-dt-label').textContent = fmtYen(dtMonthly);
+    $('sim-tsumi-label').textContent = fmtYen(tsumiMonthly);
+
+    // スライダーの値を保存
+    try {
+      localStorage.setItem('sim-params', JSON.stringify({
+        stock: $('sim-stock').value,
+        fund: $('sim-fund').value,
+        dt: $('sim-dt').value,
+        tsumi: $('sim-tsumi').value
+      }));
+    } catch(e) {}
+
+    // 現在の資産を取得(scalars()から)
+    var s = scalars();
+    var usValue = 0, fundTotal = 0;
+    STOCKS.forEach(function (st) { usValue += st.shares * st.price * s.fx; });
+    FUNDS.forEach(function (f) { fundTotal += f.units / 10000 * f.nav; });
+    var ideco = s.ideco, cash = s.cash;
+
+    var cur = usValue + fundTotal + ideco + cash;
+    simCurrentTotal = cur;
+    $('sim-current').textContent = fmtYen(cur);
+
+    var labels = ['現在', '1年後', '2年後', '3年後', '4年後', '5年後'];
+    var stockArr = [usValue];
+    var fundArr = [fundTotal + ideco];
+    var totalArr = [cur];
+
+    var stocks = usValue, funds = fundTotal, ide = ideco;
+    for (var y = 1; y <= 5; y++) {
+      stocks = stocks * (1 + stockRate) + dtMonthly * 12;
+      funds = funds * (1 + fundRate) + tsumiMonthly * 12;
+      ide = ide * (1 + fundRate);
+      stockArr.push(Math.round(stocks));
+      fundArr.push(Math.round(funds + ide));
+      totalArr.push(Math.round(stocks + funds + ide + cash));
+    }
+
+    var future = totalArr[5];
+    $('sim-future').textContent = fmtYen(future);
+    var rate = future / GOAL * 100;
+    var rateEl = $('sim-goal-rate');
+    rateEl.textContent = rate.toFixed(1) + '%';
+    rateEl.style.color = rate >= 100 ? 'var(--success)' : 'var(--amber)';
+    $('sim-goal-gap').textContent = future >= GOAL ? '達成！' : fmtYen(GOAL - future);
+
+    try {
+      drawSimLine($('sim-chart'), labels, [
+        {data: stockArr, color: '#58a6ff', width: 1.5},
+        {data: fundArr, color: '#00d4aa', width: 1.5},
+        {data: totalArr, color: '#a78bfa', width: 2}
+      ]);
+    } catch (e) {}
+
+    var tableHTML = '';
+    for (var i = 1; i <= 5; i++) {
+      var t = totalArr[i];
+      var g = (t / GOAL * 100).toFixed(1);
+      var c = t >= GOAL ? 'var(--success)' : 'var(--text-primary)';
+      tableHTML += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:0.5px solid var(--border);">' +
+        '<span style="color:var(--text-secondary);">' + i + '年後</span>' +
+        '<span style="font-weight:500; color:' + c + ';">' + fmtYen(t) + ' <span style="font-size:11px; color:var(--text-tertiary);">(' + g + '%)</span></span>' +
+        '</div>';
+    }
+    $('sim-year-table').innerHTML = tableHTML;
+  }
+
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
   }
+
+  // シミュレーターのスライダーにイベント追加(DOM準備後)
+  window.addEventListener('load', function () {
+    ['sim-stock','sim-fund','sim-dt','sim-tsumi'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', calcSim);
+    });
+  });
 })();
