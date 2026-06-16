@@ -421,6 +421,13 @@
         if (e.key === 'Enter' || e.key === ' ') window.openSim();
       });
     }
+    var simHint = $('sim-hint');
+    if (simHint) {
+      simHint.addEventListener('touchend', function (e) {
+        e.preventDefault();
+        window.openSim();
+      });
+    }
 
     $('refresh-btn').addEventListener('click', function () {
       refreshAll(function () {
