@@ -770,7 +770,7 @@
     for (var i = 1; i <= 10; i++) {
       var t = totalArr[i];
       var isGoal25 = i === 5, isGoal30 = i === 10;
-      var GOAL = isGoal30 ? GOAL_30 : GOAL_25;
+      var GOAL = i >= 6 ? GOAL_30 : GOAL_25;
       var g = (t / GOAL * 100).toFixed(1);
       var c = t >= GOAL ? 'var(--success)' : 'var(--text-primary)';
       var labelStr = isGoal25 ? '<b>25歳</b>' : isGoal30 ? '<b>30歳</b>' : i + '年後';
