@@ -583,7 +583,9 @@
   }
 
   function calcSim() {
-    var GOAL = 10000000;
+    var GOAL_25 = 10000000;   // 25歳 1000万
+    var GOAL_30 = 100000000;  // 30歳 1億
+    // 現在20歳なので、5年後=25歳、10年後=30歳
     var stockRate = parseInt($('sim-stock').value) / 100;
     var fundRate = parseInt($('sim-fund').value) / 100;
     var dtMonthly = parseInt($('sim-dt').value);
@@ -614,13 +616,13 @@
     simCurrentTotal = cur;
     $('sim-current').textContent = fmtYen(cur);
 
-    var labels = ['現在', '1年後', '2年後', '3年後', '4年後', '5年後'];
+    var labels = ['現在', '1年後', '2年後', '3年後', '4年後', '25歳', '6年後', '7年後', '8年後', '9年後', '30歳'];
     var stockArr = [usValue];
     var fundArr = [fundTotal + ideco];
     var totalArr = [cur];
 
     var stocks = usValue, funds = fundTotal, ide = ideco;
-    for (var y = 1; y <= 5; y++) {
+    for (var y = 1; y <= 10; y++) {
       stocks = stocks * (1 + stockRate) + dtMonthly * 12;
       funds = funds * (1 + fundRate) + tsumiMonthly * 12;
       ide = ide * (1 + fundRate);
@@ -629,13 +631,30 @@
       totalArr.push(Math.round(stocks + funds + ide + cash));
     }
 
-    var future = totalArr[5];
-    $('sim-future').textContent = fmtYen(future);
-    var rate = future / GOAL * 100;
+    var future5 = totalArr[5];
+    var future10 = totalArr[10];
+
+    // 5年後(25歳)目標
+    $('sim-future').textContent = fmtYen(future5);
+    var rate25 = future5 / GOAL_25 * 100;
     var rateEl = $('sim-goal-rate');
-    rateEl.textContent = rate.toFixed(1) + '%';
-    rateEl.style.color = rate >= 100 ? 'var(--success)' : 'var(--amber)';
-    $('sim-goal-gap').textContent = future >= GOAL ? '達成！' : fmtYen(GOAL - future);
+    rateEl.textContent = rate25.toFixed(1) + '%';
+    rateEl.style.color = rate25 >= 100 ? 'var(--success)' : 'var(--amber)';
+    $('sim-goal-gap').textContent = future5 >= GOAL_25 ? '達成！' : fmtYen(GOAL_25 - future5);
+
+    // 10年後(30歳)目標を追加表示
+    var future10El = $('sim-future-10');
+    if (future10El) {
+      future10El.textContent = fmtYen(future10);
+      var rate30 = future10 / GOAL_30 * 100;
+      var rateEl30 = $('sim-goal-rate-10');
+      if (rateEl30) {
+        rateEl30.textContent = rate30.toFixed(1) + '%';
+        rateEl30.style.color = rate30 >= 100 ? 'var(--success)' : 'var(--amber)';
+      }
+      var gapEl30 = $('sim-goal-gap-10');
+      if (gapEl30) gapEl30.textContent = future10 >= GOAL_30 ? '達成！' : fmtYen(GOAL_30 - future10);
+    }
 
     try {
       drawSimLine($('sim-chart'), labels, [
@@ -646,12 +665,16 @@
     } catch (e) {}
 
     var tableHTML = '';
-    for (var i = 1; i <= 5; i++) {
+    for (var i = 1; i <= 10; i++) {
       var t = totalArr[i];
+      var isGoal25 = i === 5, isGoal30 = i === 10;
+      var GOAL = isGoal30 ? GOAL_30 : GOAL_25;
       var g = (t / GOAL * 100).toFixed(1);
       var c = t >= GOAL ? 'var(--success)' : 'var(--text-primary)';
-      tableHTML += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:0.5px solid var(--border);">' +
-        '<span style="color:var(--text-secondary);">' + i + '年後</span>' +
+      var labelStr = isGoal25 ? '<b>25歳 ★1000万目標</b>' : isGoal30 ? '<b>30歳 ★1億目標</b>' : i + '年後';
+      var rowBg = (isGoal25 || isGoal30) ? 'background:rgba(167,139,250,0.08);' : '';
+      tableHTML += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:0.5px solid var(--border);' + rowBg + '">' +
+        '<span style="color:' + (isGoal25 || isGoal30 ? 'var(--purple)' : 'var(--text-secondary)') + '; font-size:' + (isGoal25 || isGoal30 ? '13px' : '13px') + ';">' + labelStr + '</span>' +
         '<span style="font-weight:500; color:' + c + ';">' + fmtYen(t) + ' <span style="font-size:11px; color:var(--text-tertiary);">(' + g + '%)</span></span>' +
         '</div>';
     }
